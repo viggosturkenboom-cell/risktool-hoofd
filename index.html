@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Risk beslisboom</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #1e293b, #020617 55%);
+      color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+    }
+
+    .app {
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      padding: 24px 20px;
+      border-radius: 20px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow:
+        0 24px 60px rgba(0,0,0,0.7),
+        0 0 0 1px rgba(15,23,42,0.9);
+    }
+
+    /* Vraag staat nu bovenaan, op de plek van de oude titel */
+    #question {
+      margin: 0 0 20px 0;
+      font-size: 20px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.4;
+      color: #f9fafb;
+    }
+
+    #result {
+      margin: 16px 0 0 0;
+      font-size: 16px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-content: center;
+      align-items: stretch;
+      margin-top: 8px;
+    }
+
+    .buttons button {
+      padding: 12px 18px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      box-shadow: 0 10px 25px rgba(37, 99, 235, 0.45);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+    }
+
+    .buttons button:active {
+      transform: translateY(1px) scale(0.99);
+      box-shadow: 0 4px 12px rgba(15,23,42,0.8);
+      opacity: 0.95;
+    }
+
+    #restartBtn {
+      margin-top: 20px;
+      width: 100%;
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      background: rgba(15,23,42,1);
+      color: #e5e7eb;
+      border: 1px solid rgba(148,163,184,0.4);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+
+    #restartBtn:active {
+      transform: translateY(1px) scale(0.99);
+    }
+
+    .hidden { display: none; }
+
+    .risk {
+      font-size: 22px;
+      font-weight: 700;
+      margin-top: 6px;
+      color: #bfdbfe;
+    }
+
+    @media (max-width: 480px) {
+      .app {
+        padding: 18px 16px;
+        border-radius: 16px;
+      }
+      #question {
+        font-size: 18px;
+      }
+      .buttons button {
+        font-size: 14px;
+        padding: 10px 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div id="question"></div>
+
+    <div id="result" class="hidden"></div>
+
+    <div class="buttons" id="answerButtons"></div>
+
+    <button id="restartBtn" class="hidden">Opnieuw beginnen</button>
+  </div>
+
+  <script>
+    const nodes = {
+      // NIEUWE START: timeframe
+      start: {
+        question: "Welke timeframe?",
+        choices: [
+          { label: "< 5 min", next: "amdModel" },
+          { label: "≥ 5 min", next: "pfModel" }
+        ]
+      },
+
+      // Perfect forever model
+      pfModel: {
+        question: "Perfect forever model?",
+        choices: [
+          { label: "Ja", next: "resultPFModel" },
+          { label: "Nee", next: "resultZero" }
+        ]
+      },
+
+      // AMD model (tak A)
+      amdModel: {
+        question: "AMD model?",
+        choices: [
+          { label: "Ja", next: "resultAMDHoog" },
+          { label: "Nee", next: "sessieLiq" }
+        ]
+      },
+
+      sessieLiq: {
+        question: "Sessie high/low liquidity uitgehaald?",
+        choices: [
+          { label: "Ja", next: "smt1" },
+          { label: "Nee", next: "smt2" }
+        ]
+      },
+
+      smt1: {
+        question: "SMT aanwezig? (#1)",
+        choices: [
+          { label: "Ja", next: "ifvg2" },
+          { label: "Nee", next: "ifvg1" }
+        ]
+      },
+
+      smt2: {
+        question: "SMT aanwezig? (#2)",
+        choices: [
+          { label: "Ja", next: "ifvg3" },
+          { label: "Nee", next: "resultZero" }
+        ]
+      },
+
+      ifvg1: {
+        question: "IFVG (#1)?",
+        choices: [
+          { label: "Ja", next: "displacement" },
+          { label: "Nee", next: "resultZero" },
+          { label: "Eerste FVG", next: "result15_400_500" }
+        ]
+      },
+
+      ifvg2: {
+        question: "IFVG (#2)?",
+        choices: [
+          { label: "Ja", next: "internalExternal" },
+          { label: "Nee", next: "displacement" },
+          { label: "Eerste FVG", next: "result20_500_700" }
+        ]
+      },
+
+      ifvg3: {
+        question: "IFVG (#3)?",
+        choices: [
+          { label: "Ja", next: "minorLiq" },
+          { label: "Nee", next: "resultZero" },
+          { label: "Eerste FVG", next: "result20_500_700" }
+        ]
+      },
+
+      displacement: {
+        question: "Displacement?",
+        choices: [
+          { label: "Ja", next: "result10_200_300" },
+          { label: "Nee", next: "resultZero" }
+        ]
+      },
+
+      internalExternal: {
+        question: "Internal én external liquidity gepakt?",
+        choices: [
+          { label: "Ja", next: "opening1" },
+          { label: "Nee", next: "opening2" }
+        ]
+      },
+
+      minorLiq: {
+        question: "Minor liquidity gepakt?",
+        choices: [
+          { label: "Ja", next: "result10_200_300" },
+          { label: "Nee", next: "resultZero" }
+        ]
+      },
+
+      opening1: {
+        question: "Veel te bearish/bullish opening? (#1)",
+        choices: [
+          { label: "Ja", next: "result13_250_350" },
+          { label: "Nee", next: "result20_400_600" }
+        ]
+      },
+
+      opening2: {
+        question: "Veel te bearish/bullish opening? (#2)",
+        choices: [
+          { label: "Ja", next: "result10_200_300" },
+          { label: "Nee", next: "result18_400_600" }
+        ]
+      },
+
+      // RESULTATEN
+      resultPFModel: { result: "Risico: 1.75% (400–600)" },
+      resultAMDHoog: { result: "Risico: 1.50% (400–500)" },
+      result15_400_500: { result: "Risico: 1.50% (400–500)" },
+      result20_500_700: { result: "Risico: 2.00% (500–700)" },
+      result10_200_300: { result: "Risico: 1.00% (200–300)" },
+      result13_250_350: { result: "Risico: 1.30% (250–350)" },
+      result20_400_600: { result: "Risico: 2.00% (400–600)" },
+      result18_400_600: { result: "Risico: 1.80% (400–600)" },
+      resultZero: { result: "Risico: 0% – setup niet nemen" }
+    };
+
+    const questionEl = document.getElementById("question");
+    const resultEl = document.getElementById("result");
+    const answerButtons = document.getElementById("answerButtons");
+    const restartBtn = document.getElementById("restartBtn");
+
+    let currentNodeId = "start";
+
+    function showNode() {
+      const node = nodes[currentNodeId];
+
+      if (node.question) {
+        questionEl.textContent = node.question;
+        resultEl.classList.add("hidden");
+        restartBtn.classList.add("hidden");
+        answerButtons.classList.remove("hidden");
+        answerButtons.innerHTML = "";
+
+        node.choices.forEach(function(choice) {
+          const btn = document.createElement("button");
+          btn.textContent = choice.label;
+          btn.onclick = function() {
+            currentNodeId = choice.next;
+            showNode();
+          };
+          answerButtons.appendChild(btn);
+        });
+      } else if (node.result) {
+        questionEl.textContent = "Resultaat";
+        resultEl.innerHTML = "<div class='risk'>" + node.result + "</div>";
+        resultEl.classList.remove("hidden");
+        answerButtons.classList.add("hidden");
+        restartBtn.classList.remove("hidden");
+      }
+    }
+
+    restartBtn.addEventListener("click", function() {
+      currentNodeId = "start";
+      showNode();
+    });
+
+    showNode();
+  </script>
+</body>
+</html>
